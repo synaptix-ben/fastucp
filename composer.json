@@ -1,0 +1,48 @@
+{
+    "name": "fastucp/laravel",
+    "description": "Laravel package for the Universal Commerce Protocol (UCP) - Build UCP-compliant merchant servers and commerce agents with REST, MCP, A2A, and Embedded Checkout support.",
+    "keywords": ["laravel", "ucp", "commerce", "checkout", "mcp", "a2a", "embedded-checkout", "universal-cart", "agentic-commerce"],
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "FastUCP Contributors"
+        }
+    ],
+    "require": {
+        "php": "^8.1",
+        "illuminate/support": "^10.0|^11.0|^12.0",
+        "illuminate/http": "^10.0|^11.0|^12.0",
+        "illuminate/routing": "^10.0|^11.0|^12.0",
+        "illuminate/database": "^10.0|^11.0|^12.0",
+        "illuminate/events": "^10.0|^11.0|^12.0"
+    },
+    "require-dev": {
+        "orchestra/testbench": "^8.0|^9.0|^10.0",
+        "phpunit/phpunit": "^10.0|^11.0"
+    },
+    "suggest": {
+        "web-token/jwt-framework": "Required for JWS response signing (^3.0)"
+    },
+    "autoload": {
+        "psr-4": {
+            "FastUcp\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "FastUcp\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "FastUcp\\UcpServiceProvider"
+            ],
+            "aliases": {
+                "Ucp": "FastUcp\\Facades\\Ucp"
+            }
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
