@@ -129,8 +129,8 @@ class UniversalCartController extends Controller
      * POST /ucp/cart/checkout
      *
      * Fans out to each merchant in the cart, creating one UCP checkout
-     * session per merchant. Local items (merchant_url null) use the local
-     * checkout handler through the same REST surface.
+     * session per merchant. Local items (merchant_url null) go straight
+     * to the registered checkout handler — no HTTP round trip to self.
      */
     public function checkout(Request $request): JsonResponse
     {
@@ -147,23 +147,28 @@ class UniversalCartController extends Controller
         $sessions = [];
 
         foreach ($cart->groupedByMerchant() as $merchantKey => $items) {
-            $merchantUrl = $merchantKey === 'self' ? config('ucp.base_url') : $merchantKey;
+            $isLocal = $merchantKey === 'self';
 
-            $lineItems = array_map(fn ($item) => [
-                'item' => ['id' => $item->itemId],
-                'quantity' => $item->quantity,
-            ], $items);
+            $payload = [
+                'line_items' => array_map(fn ($item) => [
+                    'item' => ['id' => $item->itemId],
+                    'quantity' => $item->quantity,
+                ], $items),
+                'buyer' => $data['buyer'] ?? [],
+                'currency' => $items[0]->currency,
+            ];
 
             try {
-                $client = new UcpClient($merchantUrl);
-                $checkout = $client->createCheckout(
-                    lineItems: $lineItems,
-                    buyer: $data['buyer'] ?? [],
-                    currency: $items[0]->currency,
-                );
+                $checkout = $isLocal
+                    ? $this->createLocalCheckout($payload)
+                    : (new UcpClient($merchantKey))->createCheckout(
+                        lineItems: $payload['line_items'],
+                        buyer: $payload['buyer'],
+                        currency: $payload['currency'],
+                    );
 
                 $sessions[] = [
-                    'merchant_url' => $merchantKey === 'self' ? null : $merchantUrl,
+                    'merchant_url' => $isLocal ? null : $merchantKey,
                     'merchant_name' => $items[0]->merchantName,
                     'checkout_id' => $checkout->id,
                     'status' => $checkout->status,
@@ -175,7 +180,7 @@ class UniversalCartController extends Controller
                 report($e);
 
                 $sessions[] = [
-                    'merchant_url' => $merchantKey === 'self' ? null : $merchantUrl,
+                    'merchant_url' => $isLocal ? null : $merchantKey,
                     'merchant_name' => $items[0]->merchantName,
                     'error' => $e->getMessage(),
                 ];
@@ -189,6 +194,19 @@ class UniversalCartController extends Controller
             'single_merchant' => $cart->isSingleMerchant(),
             'sessions' => $sessions,
         ], 201);
+    }
+
+    protected function createLocalCheckout(array $payload): \FastUcp\Data\CheckoutResponse
+    {
+        if ($payload['buyer'] === []) {
+            unset($payload['buyer']);
+        }
+
+        $checkout = app(\FastUcp\UcpManager::class)->callHandler('create_checkout', null, $payload);
+
+        \FastUcp\Events\CheckoutCreated::dispatch($checkout);
+
+        return $checkout;
     }
 
     protected function loadCart(Request $request): UniversalCart

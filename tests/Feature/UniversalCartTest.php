@@ -76,10 +76,9 @@ class UniversalCartTest extends TestCase
 
     public function test_single_merchant_checkout_uses_local_handler(): void
     {
-        // Local items (no merchant_url) check out against this app itself.
-        Http::fake([
-            'merchant.test/*' => Http::response($this->localCheckoutResponse(), 201),
-        ]);
+        // Local items (no merchant_url) go straight to the registered
+        // checkout handler — no HTTP request leaves the app.
+        Http::fake(fn () => $this->fail('Local checkout must not make HTTP requests'));
 
         $this->postJson('/ucp/cart/items', [
             'item_id' => 'sku_pixel', 'title' => 'Pixel 9 Pro', 'price' => 99900,
@@ -92,19 +91,21 @@ class UniversalCartTest extends TestCase
         $this->assertTrue($result['single_merchant']);
         $this->assertCount(1, $result['sessions']);
         $this->assertNull($result['sessions'][0]['merchant_url']);
-        $this->assertArrayHasKey('checkout_id', $result['sessions'][0]);
+        $this->assertStringStartsWith('chk_', $result['sessions'][0]['checkout_id']);
+        $this->assertSame('buyer@example.com', $this->app->make(\FastUcp\Contracts\SessionStore::class)
+            ->get($result['sessions'][0]['checkout_id'])['buyer']['email']);
     }
 
     public function test_multi_merchant_checkout_fans_out(): void
     {
         Http::fake([
-            'merchant.test/*' => Http::response($this->localCheckoutResponse(), 201),
             'store-a.test/*' => Http::response($this->remoteCheckoutResponse('chk_a', 'https://store-a.test/continue'), 201),
             'store-b.test/*' => Http::response($this->remoteCheckoutResponse('chk_b', null), 201),
         ]);
 
+        // Local item uses a product the local FakeCheckoutHandler knows.
         $this->postJson('/ucp/cart/items', [
-            'item_id' => 'sku_local', 'title' => 'Local Item', 'price' => 1000,
+            'item_id' => 'sku_pixel', 'title' => 'Pixel 9 Pro', 'price' => 99900,
         ]);
         $this->postJson('/ucp/cart/items', [
             'merchant_url' => 'https://store-a.test',
@@ -157,11 +158,6 @@ class UniversalCartTest extends TestCase
             ->assertOk()
             ->assertSee('Pixel 9 Pro')
             ->assertSee('Check out');
-    }
-
-    protected function localCheckoutResponse(): array
-    {
-        return $this->remoteCheckoutResponse('chk_local', null);
     }
 
     protected function remoteCheckoutResponse(string $id, ?string $continueUrl): array

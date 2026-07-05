@@ -23,12 +23,24 @@ FastUCP is a Laravel composer package implementing the [Universal Commerce Proto
 
 ## Installation
 
+Until the package is published on Packagist, install it straight from this repository — add to your app's `composer.json`:
+
+```json
+"repositories": [
+    { "type": "vcs", "url": "https://github.com/synaptix-ben/fastucp" }
+]
+```
+
+then:
+
 ```bash
-composer require fastucp/laravel
+composer require fastucp/laravel:dev-main
 
 php artisan vendor:publish --tag=ucp-config
 php artisan migrate   # checkout sessions, orders, universal cart tables
 ```
+
+(Once published to Packagist, the repositories entry becomes unnecessary.)
 
 ## Quick start
 
