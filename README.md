@@ -1,149 +1,188 @@
-# FastUCP ⚡️
+# FastUCP for Laravel ⚡️
 
-**The "FastAPI" for the Universal Commerce Protocol (UCP).**
+**Build Universal Commerce Protocol (UCP) merchant servers and commerce agents in Laravel.**
 
-FastUCP is a high-performance, developer-friendly Python framework for building UCP-compliant Merchant Servers and Commerce Agents. It combines the strict compliance of **Google's Official UCP SDK models** with the intuitive developer experience of **FastAPI**.
+FastUCP is a Laravel composer package implementing the [Universal Commerce Protocol](https://ucp.dev) — the open standard (backed by Google, Shopify, and major retailers) that lets AI agents discover products, build carts, and complete checkout against any merchant. It is a full port of the Python [fastucp](https://github.com/MehmetHilmiEmel/fastucp) framework, extended with **Embedded Checkout** and a multi-merchant **Universal Cart**.
 
-[![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://www.python.org/)
+[![PHP](https://img.shields.io/badge/PHP-8.1%2B-blue)](https://www.php.net/)
+[![Laravel](https://img.shields.io/badge/Laravel-10%20%7C%2011%20%7C%2012-red)](https://laravel.com/)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
-[![Status](https://img.shields.io/badge/Status-Alpha-orange)]()
 
-## 🌟 Why FastUCP?
+## Features
 
-The Universal Commerce Protocol involves complex JSON schemas, rigorous validation rules, and deep object nesting. **FastUCP** abstracts this complexity away.
+- ⚡ **Auto-discovery** — `/.well-known/ucp` manifest generated from your registered handlers
+- 🛒 **Checkout lifecycle** — create / update / complete sessions over REST with Laravel validation
+- 🤖 **MCP server** — expose your store as JSON-RPC 2.0 tools for LLM agents
+- 🤝 **A2A protocol** — agent card + structured and natural-language message handling
+- 🖼️ **Embedded Checkout (ECP)** — render your checkout inside an agent's iframe with JSON-RPC 2.0 over postMessage: delegation negotiation (`ec_delegate`), origin pinning, MessagePort upgrade — optionally powered by Shopify's `<shopify-checkout>` component
+- 🛍️ **Universal Cart** — one persistent cart across any number of UCP merchants with per-merchant fan-out checkout; works equally well for single-merchant stores
+- 💳 **Payment presets** — Google Pay and Stripe handlers out of the box
+- 🔏 **JWS response signing** — ES256 `UCP-Signature` headers, public keys advertised in the manifest
+- 📢 **Lifecycle events** — `CheckoutCreated`, `CheckoutUpdated`, `CheckoutCompleted`, `UniversalCartUpdated`, and more
+- 🧱 **Builder pattern** — fluent `CheckoutBuilder` with auto-calculated totals and fulfillment hierarchy
 
-* **🧱 Official Models:** Built directly on top of Google's auto-generated Pydantic models for 100% protocol compliance.
-* **🚀 Developer Experience:** Write standard Python logic. FastUCP handles the protocol headers and routing.
-* **🔍 Auto-Discovery:** Automatically generates the `/.well-known/ucp` manifest based on your registered endpoints (e.g., Discovery, Checkout).
-* **🔌 Facade Pattern:** Access all complex UCP types from a single, clean import: `fastucp.types`.
-
-## 📦 Installation
-
-*Requires Python 3.10+*
+## Installation
 
 ```bash
-# Using pip
-pip install fastucp-python
+composer require fastucp/laravel
 
-# Using uv (Recommended)
-uv add fastucp-python
+php artisan vendor:publish --tag=ucp-config
+php artisan migrate   # checkout sessions, orders, universal cart tables
 ```
 
-## ⚡️ Quick Start
-Here is a minimal Merchant Server ("Hello World") that implements Product Discovery. FastUCP automatically detects the @app.discovery route and adds the capability to your UCP Manifest.
-```python
-# main.py
-from fastucp import FastUCP
+## Quick start
 
-# 1. Initialize the App
-app = FastUCP(
-    title="Hello World Store", 
-    base_url="http://127.0.0.1:8000"
-)
+**1. Implement the checkout contract:**
 
-# Mock Database
-PRODUCTS = {
-    "sku_pixel": {
-        "id": "sku_pixel",
-        "title": "Google Pixel 9 Pro",
-        "description": "The latest AI-powered smartphone from Google.",
-        "price": 99900,  # $999.00
-        "image_url": "[https://store.google.com/pixel.jpg](https://store.google.com/pixel.jpg)",
-        "weight": 0.5
-    }
-}
+```php
+namespace App\Ucp;
 
-# 2. Register a Discovery Endpoint
-@app.discovery("/products/search")
-def search_products(query: str = ""):
-    """Search products."""
-    results = []
-    print(f"🔎 Server: Searching for '{query}'...")
-    
-    for item in PRODUCTS.values():
-        # Simple case-insensitive search
-        if query.lower() in item["title"].lower():
-            results.append({
-                "id": item["id"],
-                "title": item["title"],
-                "price": item["price"],
-                "image_url": item["image_url"]
-            })
-            
-    return {"items": results}
+use FastUcp\Builders\CheckoutBuilder;
+use FastUcp\Contracts\CheckoutHandler;
+use FastUcp\Contracts\SessionStore;
+use FastUcp\Data\CheckoutResponse;
+use FastUcp\Data\Order;
+use FastUcp\UcpManager;
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000)
-```
-
-Run the Server
-```bash
-python main.py
-```
-
-## 🚀 Verifying Compliance
-1. The UCP Manifest
-FastUCP automatically generates the entry point for the protocol. Open http://127.0.0.1:8000/.well-known/ucp to see the auto-generated manifest:
-
-```json
+class StoreCheckoutHandler implements CheckoutHandler
 {
-  "ucp": {
-    "version": "2026-01-11",
-    "services": {
-      "dev.ucp.shopping": {
-        "version": "2026-01-11",
-        "spec": "[https://ucp.dev/specification/overview](https://ucp.dev/specification/overview)",
-        "rest": {
-          "schema": "[https://ucp.dev/services/shopping/rest.openapi.json](https://ucp.dev/services/shopping/rest.openapi.json)",
-          "endpoint": "[http://127.0.0.1:8000/](http://127.0.0.1:8000/)"
-        }
-      }
-    },
-    "capabilities": [
-      {
-        "name": "dev.ucp.shopping.discovery",
-        "version": "2026-01-11",
-        "spec": "[https://ucp.dev/specs/discovery](https://ucp.dev/specs/discovery)",
-        "schema_": "[https://ucp.dev/schemas/shopping/discovery.json](https://ucp.dev/schemas/shopping/discovery.json)"
-      }
-    ]
-  }
-}
-```
-2. Interactive Docs (Swagger UI)
-Because this is built on FastAPI, you get free interactive documentation.
+    public function __construct(
+        private UcpManager $manager,
+        private SessionStore $store,
+    ) {}
 
-* Go to http://127.0.0.1:8000/docs.
-* Click GET /products/search.
-* Click Try it out and enter "pixel" in the query field.
-* Execute to see the response:
-
-```json
-{
-  "items": [
+    public function createCheckout(array $payload): CheckoutResponse
     {
-      "id": "sku_pixel",
-      "title": "Google Pixel 9 Pro",
-      "price": 99900,
-      "image_url": "[https://store.google.com/pixel.jpg](https://store.google.com/pixel.jpg)"
+        $builder = new CheckoutBuilder($this->manager, 'chk_'.str()->random(12));
+        $builder->addLink('privacy_policy', url('/privacy'));
+        $builder->addLink('terms_of_service', url('/terms'));
+
+        foreach ($payload['line_items'] as $li) {
+            $product = Product::findOrFail($li['item']['id']);
+            $builder->addItem(
+                $product->sku, $product->title,
+                $product->price_cents, $li['quantity'], $product->image_url,
+            );
+        }
+
+        $checkout = $builder->setBuyer($payload['buyer'] ?? null)->build();
+        $this->store->save($checkout->id, $checkout->toArray());
+
+        return $checkout;
     }
-  ]
+
+    public function updateCheckout(string $id, array $payload): CheckoutResponse { /* ... */ }
+
+    public function completeCheckout(string $id, array $payment): Order { /* ... */ }
 }
 ```
 
-## 🧩 Key Features
-1. The Builder Pattern For complex workflows like Checkout, FastUCP provides helper classes (like CheckoutBuilder) so you don't have to manually nest Pydantic models.
+**2. Register it in `config/ucp.php`:**
 
-2. Payment Presets Easily integrate supported payment handlers without digging into schema details:
-```python
-from fastucp.presets import GooglePay
+```php
+'base_url' => env('UCP_BASE_URL', 'https://store.example.com'),
 
-app.add_payment_handler(
-    GooglePay(merchant_id="123", gateway="stripe", ...)
-)
+'handlers' => [
+    'checkout' => App\Ucp\StoreCheckoutHandler::class,
+    'discovery' => App\Ucp\StoreDiscoveryHandler::class,
+],
+
+'protocols' => [
+    'mcp' => true,       // JSON-RPC tools for LLM agents
+    'a2a' => true,       // agent-to-agent messaging
+    'embedded' => true,  // iframe checkout via ECP
+],
+
+'universal_cart' => ['enabled' => true],
 ```
-3. AI Agent Ready (MCP) FastUCP servers are designed to be easily consumed by LLM Agents (Claude, Gemini, OpenAI) via the Model Context Protocol (MCP), bridging the gap between traditional e-commerce and AI Agents.
 
-## 📄 License
-This project is licensed under the terms of the MIT License.
+**3. Done.** Your store now serves:
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /.well-known/ucp` | Discovery manifest |
+| `POST /ucp/checkout-sessions` | Create checkout |
+| `PATCH /ucp/checkout-sessions/{id}` | Update checkout (buyer, shipping) |
+| `POST /ucp/checkout-sessions/{id}/complete` | Complete checkout → Order |
+| `GET/POST /ucp/mcp` | MCP JSON-RPC 2.0 server |
+| `GET /.well-known/agent-card.json` | A2A agent card |
+| `POST /ucp/agent/message` | A2A message handler |
+| `GET /ucp/embedded-checkout/{id}` | Embedded checkout UI (iframe) |
+| `GET/POST/PATCH/DELETE /ucp/cart/...` | Universal cart API |
+
+## Consuming other merchants (client)
+
+```php
+use FastUcp\Client\UcpClient;
+
+$client = new UcpClient('https://other-store.example.com', transport: 'mcp');
+$client->discover();
+
+$results = $client->searchProducts('running shoes');
+
+$checkout = $client->createCheckout([
+    ['item' => ['id' => $results['items'][0]['id']], 'quantity' => 1],
+]);
+$checkout = $client->updateCheckout($checkout->id, ['buyer' => ['email' => 'a@b.com']]);
+$order = $client->completeCheckout($checkout->id, ['token' => 'tok_...', 'type' => 'tokenized_card']);
+```
+
+## Universal Cart
+
+Add items from any UCP merchant into one cart; checkout fans out one session per merchant:
+
+```http
+POST /ucp/cart/items
+X-UCP-Cart-Id: my-agent-cart-42
+
+{ "merchant_url": "https://store-a.test", "item_id": "sku_1",
+  "title": "Shoes", "price": 12900, "quantity": 1 }
+```
+
+```http
+POST /ucp/cart/checkout
+X-UCP-Cart-Id: my-agent-cart-42
+
+→ { "single_merchant": false,
+    "sessions": [
+      { "merchant_url": "https://store-a.test", "checkout_id": "chk_a",
+        "continue_url": "https://store-a.test/ucp/embedded-checkout/chk_a", ... },
+      ...
+    ] }
+```
+
+Headless agents identify their cart with the `X-UCP-Cart-Id` header; browser users fall back to their auth user or session automatically.
+
+## Listening to checkout events
+
+```php
+// app/Providers/EventServiceProvider.php
+protected $listen = [
+    \FastUcp\Events\CheckoutCompleted::class => [
+        \App\Listeners\SendOrderConfirmation::class,
+        \App\Listeners\DecrementInventory::class,
+    ],
+];
+```
+
+## Documentation
+
+- [Installation](docs/installation.md)
+- [Quickstart](docs/quickstart.md)
+- [Checkout Builder](docs/checkout-builder.md)
+- [Protocols: MCP, A2A, Embedded Checkout](docs/protocols.md)
+- [Universal Cart](docs/universal-cart.md)
+- [Payment Handlers](docs/payment-handlers.md)
+- [Events](docs/events.md)
+- [Security & Signing](docs/security.md)
+
+## Testing
+
+```bash
+composer install
+vendor/bin/phpunit
+```
+
+## License
+
+MIT. UCP schemas are © UCP Authors, Apache 2.0.

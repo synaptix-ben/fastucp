@@ -10,21 +10,29 @@ use Illuminate\Support\ServiceProvider;
 
 class UcpServiceProvider extends ServiceProvider
 {
+    protected bool $handlersRegistered = false;
+
     public function register(): void
     {
         $this->mergeConfigFrom(__DIR__.'/../config/ucp.php', 'ucp');
 
-        $this->app->singleton(UcpManager::class, function ($app) {
-            $manager = new UcpManager(
-                baseUrl: config('ucp.base_url'),
-                version: config('ucp.version'),
-                title: config('ucp.title'),
-                protocols: config('ucp.protocols', []),
-            );
+        $this->app->singleton(UcpManager::class, fn () => new UcpManager(
+            baseUrl: config('ucp.base_url'),
+            version: config('ucp.version'),
+            title: config('ucp.title'),
+            protocols: config('ucp.protocols', []),
+        ));
+
+        // Handlers may type-hint UcpManager in their constructors, so they
+        // must be resolved after the singleton is stored — afterResolving
+        // fires once the instance is already in the container.
+        $this->app->afterResolving(UcpManager::class, function (UcpManager $manager) {
+            if ($this->handlersRegistered) {
+                return;
+            }
+            $this->handlersRegistered = true;
 
             $this->registerConfiguredHandlers($manager);
-
-            return $manager;
         });
 
         $this->app->alias(UcpManager::class, 'ucp');

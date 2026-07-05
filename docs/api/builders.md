@@ -1,3 +1,0 @@
-# Builders
-
-::: fastucp.builders.CheckoutBuilder

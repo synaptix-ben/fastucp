@@ -128,7 +128,7 @@
         </div>
     </div>
 
-    <script>{!! file_get_contents(__DIR__.'/../js/ecp-bridge.js') !!}</script>
+    <script>{!! $bridgeJs !!}</script>
     <script>
         (function () {
             var checkout = @json($checkout);

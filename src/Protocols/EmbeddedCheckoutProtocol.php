@@ -49,6 +49,7 @@ class EmbeddedCheckoutProtocol
             'useShopifyComponent' => (bool) config('ucp.embedded.use_shopify_component'),
             'shopifyCheckoutUrl' => config('ucp.embedded.shopify_checkout_url'),
             'allowedOrigins' => config('ucp.embedded.allowed_origins'),
+            'bridgeJs' => $this->bridgeJs(),
         ];
     }
 
@@ -59,6 +60,21 @@ class EmbeddedCheckoutProtocol
     public function continueUrl(string $sessionId): string
     {
         return $this->manager->baseUrl().'/ucp/embedded-checkout/'.$sessionId;
+    }
+
+    /**
+     * The browser-side ECP bridge, inlined into the checkout view. Reads
+     * the published asset when available so apps can customize it.
+     */
+    protected function bridgeJs(): string
+    {
+        $published = public_path('vendor/ucp/js/ecp-bridge.js');
+
+        $path = is_file($published)
+            ? $published
+            : dirname(__DIR__, 2).'/resources/js/ecp-bridge.js';
+
+        return (string) file_get_contents($path);
     }
 
     protected function originAllowed(?string $origin): bool

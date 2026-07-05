@@ -205,11 +205,19 @@ class UniversalCartController extends Controller
     }
 
     /**
-     * Authenticated users get a stable per-user cart; guests fall back to
-     * their session id, so the cart persists across page loads.
+     * Cart identity resolution, in priority order:
+     *
+     * 1. X-UCP-Cart-Id header — lets headless agents (which have no
+     *    browser session) maintain a stable cart across requests.
+     * 2. Authenticated user — one persistent cart per user.
+     * 3. Browser session — guest carts that survive page loads.
      */
     protected function cartId(Request $request): string
     {
+        if ($clientCartId = $request->header('X-UCP-Cart-Id')) {
+            return 'client:'.$clientCartId;
+        }
+
         if ($request->user() !== null) {
             return 'user:'.$request->user()->getAuthIdentifier();
         }
